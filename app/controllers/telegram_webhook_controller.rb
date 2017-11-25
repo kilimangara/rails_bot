@@ -2,28 +2,71 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   include Telegram::Bot::UpdatesController::MessageContext
   context_to_action!
 
-  before_action :try_to_login, except: [:login]
+  before_action :try_to_login, unless: 'logged_in?'
 
   STATE_CATEGORY = 0
   STATE_PRODUCT = 1
   STATE_KORZINA = 2
   STATE_LOGIN = 3
 
+  BACK_WORD = 'Назад'.freeze
+
   def start(*)
-    markup = build_category_keyboard
-    save_context :start
-    respond_with :message, text: 'Приветсвую Вас, я помогу выбрать и сделать вам заказ.Выберите из категорий',
-                           reply_markup: markup
+    if @user
+      category
+      save_context :category
+    end
   end
 
-  def category(*)
+  def category(*args)
+    value = args.join(' ')
+    if value
+      category = Category.where(name: value).first
+      if category
+        save_context :product
+        respond_with :message, text: "Теперь выберите что-то из категории #{value}",
+                               reply_markup: build_products_keyboard(category.products)
+      else
+        markup = build_category_keyboard
+        respond_with :message, text: "Категории #{value} нет. Выберите заново",
+                     reply_markup: markup
+      end
+    else
+      markup = build_category_keyboard
+      respond_with :message, text: 'Приветсвую Вас, я помогу выбрать и сделать вам заказ.Выберите из категорий',
+                             reply_markup: markup
+    end
   end
 
-  def login(*)
+  def product(*args)
+    value = args.join ' '
+    if value
+      if value == BACK_WORD
+        category
+        save_context :category
+      else
+        product = Product.where(name: value).first
+        if product
+          respond_with :message, text: "Вы выбрали #{value}"
+        else
+          respond_with :message, text: "#{value} нет в каталоге"
+        end
+        save_context :product
+        byebug
+      end
+    end
+  end
+
+  def login(*args)
     contact = @_payload['contact']
+    if @user
+      respond_with :message, text: "Вы уже залогинены, как #{@user.name}"
+      start
+      return
+    end
     if contact
       @user = User.find_or_create_by(phone: contact['phone_number'], name: contact['first_name'])
-      session[:user_id] = contact['user_id']
+      session[:user_id] = @user.id
       start
     else
       respond_with_login_keyboard
@@ -133,12 +176,8 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   private
 
   def try_to_login
-    @user ||= User.where(id: session[:user_id]).first
-    unless @user
       save_context :login
       respond_with_login_keyboard
-      head(:ok)
-    end
   end
 
   def respond_with_login_keyboard
@@ -167,4 +206,23 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       selective: true
     }
   end
+
+  def build_products_keyboard(products)
+    kb = []
+    products.each do |p|
+      kb.append(p.name)
+    end
+    kb.append(BACK_WORD)
+    kb = [kb]
+    {
+      keyboard: kb,
+      resize_keyboard: true, one_time_keyboard: true,
+      selective: true
+    }
+  end
+
+  def logged_in?
+    @user ||= User.where(id: session[:user_id]).first
+  end
+
 end
