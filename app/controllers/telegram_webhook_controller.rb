@@ -14,6 +14,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   def start(*)
     if @user
       category
+      session[:cart] = []
       save_context :category
     end
   end
@@ -29,7 +30,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       else
         markup = build_category_keyboard
         respond_with :message, text: "Категории #{value} нет. Выберите заново",
-                     reply_markup: markup
+                               reply_markup: markup
       end
     else
       markup = build_category_keyboard
@@ -52,12 +53,11 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
           respond_with :message, text: "#{value} нет в каталоге"
         end
         save_context :product
-        byebug
       end
     end
   end
 
-  def login(*args)
+  def login(*_args)
     contact = @_payload['contact']
     if @user
       respond_with :message, text: "Вы уже залогинены, как #{@user.name}"
@@ -77,34 +77,10 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     respond_with :message, text: t('.content')
   end
 
-  def memo(*args)
-    if args.any?
-      session[:memo] = args.join(' ')
-      respond_with :message, text: t('.notice')
-    else
-      respond_with :message, text: t('.prompt')
-      save_context :memo
-    end
-  end
-
   def remind_me
     to_remind = session.delete(:memo)
     reply = to_remind || t('.nothing')
     respond_with :message, text: reply
-  end
-
-  def keyboard(value = nil, *)
-    if value
-      respond_with :message, text: t('.selected', value: value)
-    else
-      save_context :keyboard
-      respond_with :message, text: t('.prompt'), reply_markup: {
-        keyboard: [t('.buttons')],
-        resize_keyboard: true,
-        one_time_keyboard: true,
-        selective: true
-      }
-    end
   end
 
   def inline_keyboard
@@ -175,9 +151,28 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   private
 
+  def add_product(product_id, quantity)
+    index = session[:cart].find_index { |obj| obj.product_id = product_id }
+    if index
+      session[:cart].at(index).quantity += quantity
+    else
+      session[:cart] = session[:cart].push({product: product_id,
+                                           ingridients: [],
+                                           quantity: quantity})
+    end
+  end
+
+  def add_ingridient(product_id, ingridient_id)
+    index = session[:cart].find_index { |obj| obj.product_id = product_id }
+    if index
+      product_hash = session[:cart].at(index)
+      product_hash.ingridients = product_hash.ingridients.push(ingridient_id)
+    end
+  end
+
   def try_to_login
-      save_context :login
-      respond_with_login_keyboard
+    save_context :login
+    respond_with_login_keyboard
   end
 
   def respond_with_login_keyboard
@@ -224,5 +219,4 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   def logged_in?
     @user ||= User.where(id: session[:user_id]).first
   end
-
 end
