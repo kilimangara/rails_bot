@@ -26,7 +26,10 @@ default: &default
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
 
 development:
-  <<: *default
+  adapter: postgresql
+  encoding: unicode
+  username: nikitazlain
+  password: 131196
   database: shaurma_bot_development
 
   # The specified database role being used to connect to postgres.
@@ -83,7 +86,6 @@ test:
 #     url: <%= ENV['DATABASE_URL'] %>
 #
 production:
-  <<: *default
-  database: shaurma_bot_production
-  username: shaurma_bot
-  password: <%= ENV['SHAURMA_BOT_DATABASE_PASSWORD'] %>
+  url: <%= ENV['DATABASE_URL'] %>
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+
