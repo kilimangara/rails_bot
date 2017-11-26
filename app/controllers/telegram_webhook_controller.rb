@@ -1,54 +1,68 @@
 class TelegramWebhookController < Telegram::Bot::UpdatesController
   include Telegram::Bot::UpdatesController::MessageContext
+  require 'json'
   context_to_action!
+  use_session!
 
-  before_action :try_to_login, unless: 'logged_in?'
+  BACK_WORD = '← Назад'.freeze
 
-  STATE_CATEGORY = 0
-  STATE_PRODUCT = 1
-  STATE_KORZINA = 2
-  STATE_LOGIN = 3
+  IN_CART_WORD = 'В корзину'.freeze
 
-  BACK_WORD = 'Назад'.freeze
+  CALLBACK_TYPE_ADD_INGRIDIENT = 0
+  CALLBACK_TYPE_DELETE_FROM_CART = 1
+  CALLBACK_TYPE_DUPLICATE_ITEM = 2
 
   def start(*)
-    if @user
-      category
-      session[:cart] = []
-      save_context :category
-    end
+    category
+    session[:cart] = []
   end
 
   def category(*args)
-    value = args.join(' ')
+    value = !args.empty? ? args.join(' ') : nil
+    save_context :category
     if value
-      category = Category.where(name: value).first
-      if category
-        save_context :product
-        respond_with :message, text: "Теперь выберите что-то из категории #{value}",
-                               reply_markup: build_products_keyboard(category.products)
+      if value == IN_CART_WORD
+        cart
       else
-        markup = build_category_keyboard
-        respond_with :message, text: "Категории #{value} нет. Выберите заново",
-                               reply_markup: markup
+        category = Category.where(name: value).first
+        if category
+          save_context :product
+          respond_with :message, text: "Теперь выберите что-то из категории #{value}",
+                                 reply_markup: build_products_keyboard(category.products)
+        else
+          markup = build_category_keyboard
+          respond_with :message, text: "Категории #{value} нет. Выберите заново",
+                                 reply_markup: markup
+        end
       end
     else
       markup = build_category_keyboard
-      respond_with :message, text: 'Приветсвую Вас, я помогу выбрать и сделать вам заказ.Выберите из категорий',
-                             reply_markup: markup
+      respond_with :message, text: 'Я еще учусь!', reply_markup: markup
     end
   end
 
   def product(*args)
-    value = args.join ' '
+    value = !args.empty? ? args.join(' ') : nil
     if value
       if value == BACK_WORD
         category
         save_context :category
+      elsif value == IN_CART_WORD
+        cart
       else
         product = Product.where(name: value).first
         if product
-          respond_with :message, text: "Вы выбрали #{value}"
+          ingridients = product.ingridients
+          inline = []
+          ingridients.each do |i|
+            callback_data = JSON.generate(type: CALLBACK_TYPE_ADD_INGRIDIENT, id: i.id)
+            inline.append(text: "#{i.name} Цена: #{i.price}", callback_data: callback_data)
+          end
+          add_product(product.id, 1)
+          category
+          respond_with :message, text: "Вы выбрали #{value}", reply_markup: {
+            inline_keyboard: [inline]
+          }
         else
           respond_with :message, text: "#{value} нет в каталоге"
         end
@@ -73,56 +87,72 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     end
   end
 
+  def cart(*args)
+    value = !args.empty? ? args.join(' ') : nil
+    save_context :cart
+    if value == 'Оформить заказ'
+      respond_with :message, text: 'ВАУЧ'
+    elsif value == 'Обратно в категории'
+      category
+    else
+      total_price = 0
+      session[:cart].each_with_index do |item, index|
+        p = Product.find(item[:product])
+        ingrs = Ingridient.find(item[:ingridients])
+        total_price += count_price(p, ingrs)*item[:quantity]
+        additional_text = ''
+        ingrs.each { |ingr| additional_text += "#{ingr.name} "}
+        text = additional_text.empty? ? "#{index + 1}. #{p.name} x #{item[:quantity]}"
+                   : "#{index + 1}. #{p.name} x #{item[:quantity]} с #{additional_text}"
+        respond_with :message, text: text, reply_markup: {
+            inline_keyboard: [
+                [{text:'Дублировать позицию', callback_data: JSON.generate(type: CALLBACK_TYPE_DUPLICATE_ITEM, index: index)},
+                 {text:'Удалить', callback_data: JSON.generate(type:CALLBACK_TYPE_DELETE_FROM_CART, index: index)}]
+            ]
+        }
+      end
+      respond_with :message, text: "Сумма заказа #{total_price} рублей", reply_markup: {
+        keyboard: [
+          ['Оформить заказ'],
+          ['Обратно в категории']
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true,
+        selective: true
+      }
+    end
+  end
+
   def help(*)
     respond_with :message, text: t('.content')
   end
 
-  def remind_me
-    to_remind = session.delete(:memo)
-    reply = to_remind || t('.nothing')
-    respond_with :message, text: reply
-  end
-
-  def inline_keyboard
-    respond_with :message, text: t('.prompt'), reply_markup: {
-      inline_keyboard: [
-        [
-          { text: t('.alert'), callback_data: 'alert' },
-          { text: t('.no_alert'), callback_data: 'no_alert' }
-        ],
-        [{ text: t('.repo'), url: 'https://github.com/telegram-bot-rb/telegram-bot' }]
-      ]
-    }
-  end
-
   def callback_query(data)
-    if data == 'alert'
-      answer_callback_query t('.alert'), show_alert: true
-    else
-      answer_callback_query t('.no_alert')
+    if data
+      json_data = JSON.parse(data)
+      case json_data['type']
+        when CALLBACK_TYPE_ADD_INGRIDIENT
+          i = Ingridient.find(json_data['id'])
+          add_ingridient(i.id)
+          edit_message :reply_markup, reply_markup: {
+            inline_keyboard: [[]]
+          }
+          answer_callback_query  'Добавлено', show_alert: true
+        when CALLBACK_TYPE_DUPLICATE_ITEM
+          session[:cart].at(json_data['index'])[:quantity] += 1
+          cart
+          answer_callback_query 'Изменено кол-во', show_alert: true
+        when CALLBACK_TYPE_DELETE_FROM_CART
+          session[:cart].delete_at(json_data['index'])
+          edit_message :text, text: 'Удалено'
+          answer_callback_query  'Добавлено', show_alert: true
+        else answer_callback_query  'Произошла ошибка', show_alert: true
+      end
     end
   end
 
   def message(message)
     respond_with :message, text: t('.content', text: message['text'])
-  end
-
-  def inline_query(query, _offset)
-    query = query.first(10) # it's just an example, don't use large queries.
-    t_description = t('.description')
-    t_content = t('.content')
-    results = 5.times.map do |i|
-      {
-        type: :article,
-        title: "#{query}-#{i}",
-        id: "#{query}-#{i}",
-        description: "#{t_description} #{i}",
-        input_message_content: {
-          message_text: "#{t_content} #{i}"
-        }
-      }
-    end
-    answer_inline_query results
   end
 
   # As there is no chat id in such requests, we can not respond instantly.
@@ -141,7 +171,6 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   end
 
   def action_missing(action, *_args)
-    puts action
     if command?
       respond_with :message, text: t('telegram_webhook.action_missing.command', command: action)
     else
@@ -151,22 +180,27 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   private
 
-  def add_product(product_id, quantity)
-    index = session[:cart].find_index { |obj| obj.product_id = product_id }
-    if index
-      session[:cart].at(index).quantity += quantity
-    else
-      session[:cart] = session[:cart].push({product: product_id,
-                                           ingridients: [],
-                                           quantity: quantity})
+  def count_price(product, ingridients)
+    result = product.price
+    ingridients.each do |i|
+      result += i.price
     end
+    result
   end
 
-  def add_ingridient(product_id, ingridient_id)
-    index = session[:cart].find_index { |obj| obj.product_id = product_id }
+  def add_product(product_id, quantity)
+    session[:last_added_product] = product_id
+    session[:cart] = session[:cart].push(product: product_id,
+                                         ingridients: [],
+                                         quantity: quantity)
+  end
+
+  def add_ingridient(ingridient_id)
+    product_id = session[:last_added_product]
+    index = session[:cart].find_index { |obj| obj[:product] == product_id }
     if index
       product_hash = session[:cart].at(index)
-      product_hash.ingridients = product_hash.ingridients.push(ingridient_id)
+      product_hash[:ingridients] = product_hash[:ingridients].push(ingridient_id)
     end
   end
 
@@ -191,9 +225,9 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   def build_category_keyboard
     kb = []
     Category.all.each do |c|
-      kb.append(c.name)
+      kb.append([c.name])
     end
-    kb = [kb]
+    kb.append([IN_CART_WORD]) unless session[:cart].empty?
     {
       keyboard: kb,
       resize_keyboard: true,
@@ -205,10 +239,10 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   def build_products_keyboard(products)
     kb = []
     products.each do |p|
-      kb.append(p.name)
+      kb.append([p.name])
     end
-    kb.append(BACK_WORD)
-    kb = [kb]
+    kb.append([BACK_WORD])
+    kb.append([IN_CART_WORD]) unless session[:cart].empty?
     {
       keyboard: kb,
       resize_keyboard: true, one_time_keyboard: true,
