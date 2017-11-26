@@ -11,6 +11,10 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   CALLBACK_TYPE_ADD_INGRIDIENT = 0
   CALLBACK_TYPE_DELETE_FROM_CART = 1
   CALLBACK_TYPE_DUPLICATE_ITEM = 2
+  CALLBACK_TYPE_SAVED_ADDRESS = 3
+
+  ORDER_STAGE_ADDRESS = 1
+  ORDER_STAGE_DELIVERY_TIME = 2
 
   def start(*)
     category
@@ -50,6 +54,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       elsif value == IN_CART_WORD
         cart
       else
+        save_context :product
         product = Product.where(name: value).first
         if product
           ingridients = product.ingridients
@@ -60,30 +65,29 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
           end
           add_product(product.id, 1)
           category
+          save_context :category
           respond_with :message, text: "Вы выбрали #{value}", reply_markup: {
             inline_keyboard: [inline]
           }
         else
           respond_with :message, text: "#{value} нет в каталоге"
         end
-        save_context :product
       end
     end
   end
 
-  def login(*_args)
+  def login(*args)
     contact = @_payload['contact']
-    if @user
-      respond_with :message, text: "Вы уже залогинены, как #{@user.name}"
-      start
-      return
-    end
-    if contact
-      @user = User.find_or_create_by(phone: contact['phone_number'], name: contact['first_name'])
-      session[:user_id] = @user.id
-      start
+    if logged_in?
+      order
     else
-      respond_with_login_keyboard
+      if contact
+        @user = User.find_or_create_by(phone: contact['phone_number'], name: contact['first_name'])
+        session[:user_id] = @user.id
+        order
+      else
+        respond_with_login_keyboard
+      end
     end
   end
 
@@ -91,7 +95,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     value = !args.empty? ? args.join(' ') : nil
     save_context :cart
     if value == 'Оформить заказ'
-      respond_with :message, text: 'ВАУЧ'
+      order
     elsif value == 'Обратно в категории'
       category
     else
@@ -111,7 +115,11 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
             ]
         }
       end
-      respond_with :message, text: "Сумма заказа #{total_price} рублей", reply_markup: {
+      if total_price < 500
+        total_price += 200
+        respond_with :message, text: 'Доставка платная при сумме заказа меньше 500 рублей. Стоимость 200 рублей'
+      end
+      respond_with :message, text: "Сумма заказа #{total_price} рублей. С учетом доставки", reply_markup: {
         keyboard: [
           ['Оформить заказ'],
           ['Обратно в категории']
@@ -120,6 +128,32 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
         one_time_keyboard: true,
         selective: true
       }
+    end
+  end
+
+  def order(*args)
+    value = !args.empty? ? args.join(' ') : nil
+    save_context :order
+    if logged_in?
+      if value
+        case session[:order_stage]
+          when ORDER_STAGE_DELIVERY_TIME
+            response = order_time value
+            after_order_action if response[:ok]
+            respond_with :message,
+                         text: "Ваш заказ принят! Сумма заказа #{response[:order].total}" if response[:ok]
+          when ORDER_STAGE_ADDRESS
+            session[:shipping_address] = value
+            session[:order_stage] = ORDER_STAGE_DELIVERY_TIME
+            respond_with :message, text: 'Введите время доставки в формате 24.11.2017 10:00'
+          else session[:order_stage] = ORDER_STAGE_ADDRESS
+        end
+      else
+        session[:order_stage] = ORDER_STAGE_ADDRESS
+        respond_with :message, text: 'Выберите адрес доставки'
+      end
+    else
+      login
     end
   end
 
@@ -145,28 +179,9 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
         when CALLBACK_TYPE_DELETE_FROM_CART
           session[:cart].delete_at(json_data['index'])
           edit_message :text, text: 'Удалено'
-          answer_callback_query  'Добавлено', show_alert: true
+          answer_callback_query  'Удалена позиция', show_alert: true
         else answer_callback_query  'Произошла ошибка', show_alert: true
       end
-    end
-  end
-
-  def message(message)
-    respond_with :message, text: t('.content', text: message['text'])
-  end
-
-  # As there is no chat id in such requests, we can not respond instantly.
-  # So we just save the result_id, and it's available then with `/last_chosen_inline_result`.
-  def chosen_inline_result(result_id, _query)
-    session[:last_chosen_inline_result] = result_id
-  end
-
-  def last_chosen_inline_result
-    result_id = session[:last_chosen_inline_result]
-    if result_id
-      respond_with :message, text: t('.selected', result_id: result_id)
-    else
-      respond_with :message, text: t('.prompt')
     end
   end
 
@@ -179,6 +194,48 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   end
 
   private
+
+  def after_order_action
+    session[:cart] = []
+    session[:order_stage] = 0
+    respond_with :message, text: 'Возможно вы хотите что-то еще?'
+    category
+  end
+
+  def order_time(time)
+    parsed_time = time.in_time_zone('Moscow')
+    if parsed_time
+      order = build_order(parsed_time)
+      {ok: true, order: order}
+    else
+      respond_with :message, text: 'Неправильный формат, попробуйте еще раз'
+      {ok: false}
+    end
+  end
+
+  def build_order(delivery_time)
+    order = Order.create(user_id: @user.id, delivery_date: delivery_time,
+                         shipping_address: session[:shipping_address])
+    total_price = 0
+    session[:cart].each do |item|
+      product = Product.find(item[:product])
+      product_line = OrderLine.create(order_id: order.id, name: product.name, price: product.price,
+                                      quantity: item[:quantity])
+      total_price += product.price * item[:quantity]
+      item[:ingridients].each do |ingr_id|
+      ingr = Ingridient.find(ingr_id)
+      OrderLine.create(order_id: order.id, name: ingr.name, price: ingr.price,
+                       parent_order_line_id: product_line.id, quantity: 1)
+      total_price += ingr.price
+      end
+    end
+    if total_price < 500
+      OrderLine.create(name: 'Доставка', order_id: order.id, price: 200, quantity: 1)
+      total_price += 200
+    end
+    order.total = total_price
+    order.save
+  end
 
   def count_price(product, ingridients)
     result = product.price
