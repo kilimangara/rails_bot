@@ -91,6 +91,10 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     end
   end
 
+  def message(*args)
+    start
+  end
+
   def cart(*args)
     value = !args.empty? ? args.join(' ') : nil
     save_context :cart
