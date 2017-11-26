@@ -21,7 +21,7 @@ module ShaurmaBot
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults 5.1
-    # config.cache_store = :redis_store, "redis://rediscloud:1uR2jDm49s0XBHXn@redis-18367.c10.us-east-1-2.ec2.cloud.redislabs.com:18367/0", { expires_in: 90.minutes }
+    config.cache_store = :redis_store, "redis://rediscloud:1uR2jDm49s0XBHXn@redis-18367.c10.us-east-1-2.ec2.cloud.redislabs.com:18367/0/cache"
     config.time_zone = 'Moscow'
 
     # Settings in config/environments/* take precedence over those specified here.

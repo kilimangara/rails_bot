@@ -62,7 +62,9 @@ Rails.application.configure do
   # the I18n.default_locale when a translation cannot be found).
   config.i18n.fallbacks = true
 
-  config.telegram_updates_controller.session_store = :redis_store, {expires_in: 1.month }
+  config.telegram_updates_controller.session_store = :redis_store,
+      "redis://rediscloud:1uR2jDm49s0XBHXn@redis-18367.c10.us-east-1-2.ec2.cloud.redislabs.com:18367/0/cache",
+      {expires_in: 1.month }
 
   # Send deprecation notices to registered listeners.
   config.active_support.deprecation = :notify
