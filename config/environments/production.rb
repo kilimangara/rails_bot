@@ -62,7 +62,7 @@ Rails.application.configure do
   # the I18n.default_locale when a translation cannot be found).
   config.i18n.fallbacks = true
 
-  config.telegram_updates_controller.session_store = :file_store
+  config.telegram_updates_controller.session_store = :memory_store
 
   # Send deprecation notices to registered listeners.
   config.active_support.deprecation = :notify
