@@ -235,6 +235,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     end
     order.total = total_price
     order.save
+    order
   end
 
   def count_price(product, ingridients)
