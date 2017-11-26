@@ -17,8 +17,8 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   ORDER_STAGE_DELIVERY_TIME = 2
 
   def start(*)
-    category
     session[:cart] = []
+    category
   end
 
   def category(*args)
