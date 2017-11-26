@@ -2,7 +2,6 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   include Telegram::Bot::UpdatesController::MessageContext
   require 'json'
   context_to_action!
-  use_session!
 
   BACK_WORD = '← Назад'.freeze
 
