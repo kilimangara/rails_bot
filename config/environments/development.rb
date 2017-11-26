@@ -29,7 +29,7 @@ Rails.application.configure do
   # Don't care if the mailer can't send.
   config.action_mailer.raise_delivery_errors = false
 
-  config.telegram_updates_controller.session_store = :redis_store, {}
+  config.telegram_updates_controller.session_store = :redis_store, { expires_in: 1.month }
 
   config.action_mailer.perform_caching = false
 
