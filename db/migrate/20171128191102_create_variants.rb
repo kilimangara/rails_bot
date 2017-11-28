@@ -3,7 +3,8 @@ class CreateVariants < ActiveRecord::Migration[5.1]
     create_table :variants do |t|
 
       t.string :name
-      t.belongs_to :products, foreign_key: true
+      t.integer :price
+      t.belongs_to :product, foreign_key: true, null: true
 
       t.timestamps
     end

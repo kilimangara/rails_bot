@@ -79,13 +79,14 @@ ActiveRecord::Schema.define(version: 20171128191102) do
 
   create_table "variants", force: :cascade do |t|
     t.string "name"
-    t.bigint "products_id"
+    t.integer "price"
+    t.bigint "product_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["products_id"], name: "index_variants_on_products_id"
+    t.index ["product_id"], name: "index_variants_on_product_id"
   end
 
   add_foreign_key "order_lines", "order_lines", column: "parent_order_line_id"
   add_foreign_key "orders", "users"
-  add_foreign_key "variants", "products", column: "products_id"
+  add_foreign_key "variants", "products"
 end
