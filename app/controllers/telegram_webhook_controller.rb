@@ -65,7 +65,9 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
           add_product(product.id, 1)
           category
           save_context :category
-          respond_with :message, text: "Вы выбрали #{value}", reply_markup: {
+          # respond_with :photo, photo: 'https://s3.eu-central-1.amazonaws.com/statictgbot/static/ulitka.jpg'
+          respond_with :photo, photo: 'https://s3.eu-central-1.amazonaws.com/statictgbot/static/ulitka.jpg',
+                       caption: "В корзину #{value}", reply_markup: {
             inline_keyboard: [inline]
           }
         else
