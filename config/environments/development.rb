@@ -29,7 +29,11 @@ Rails.application.configure do
   # Don't care if the mailer can't send.
   config.action_mailer.raise_delivery_errors = false
 
-  config.telegram_updates_controller.session_store = :redis_store, { expires_in: 1.month }
+  config.telegram_updates_controller.session_store = :redis_store,
+      "redis://rediscloud:1uR2jDm49s0XBHXn@redis-18367.c10.us-east-1-2.ec2.cloud.redislabs.com:18367/0/cache",
+      {expires_in: 1.month }
+
+  routes.default_url_options = {host: 'peaceful-island-79132.herokuapp.com', protocol: 'https'}
 
   config.action_mailer.perform_caching = false
 
