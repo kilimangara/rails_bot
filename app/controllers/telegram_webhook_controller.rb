@@ -79,9 +79,11 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     end
   end
 
-  def login(first_time=false)
+  def login(*args)
+    value = !args.empty? ? args.join(' ') : nil
     contact = @_payload['contact']
-    if first_time
+    save_context :login
+    if value == 'FIRSTTIME'
       respond_with :message, text: 'Отправьте свой контакт для авторизации.
         В мобильной версии нажмите на скрепку и там выберите пункт "Контакт".
         А в десктопной версии Вам надо выбрать зайти в свой профиль и там нажать соответствующую кнопку'
@@ -176,7 +178,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
         respond_with :message, text: 'Выберите адрес доставки'
       end
     else
-      login(true)
+      login('FIRSTTIME')
     end
   end
 
