@@ -30,24 +30,34 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     if value
       if value == IN_CART_WORD
         cart
+      elsif value == BACK_WORD
+        session[:category_stack_id].pop
+        respond_with :message, text: 'Снова тут :(',
+                                       reply_markup: build_category_keyboard(session[:category_stack_id].last)
+      elsif value == OPEN_CURRENT_CATEGORY
+        category = Category.find(session[:category_stack_id].last)
+        save_context :product
+        respond_with :message, text: 'Можно выбирать!',
+                                       reply_markup: build_products_keyboard(category.products)
       else
         category = Category.where(name: value).first
         if category
-          if category.inner_categories
+          if !category.inner_categories.empty?
             session[:category_stack_id].push(category.id)
             respond_with :message, text:"Продолжим!", reply_markup: build_category_keyboard(category.id)
+          else
+            save_context :product
+            respond_with :message, text: "Теперь выберите что-то из категории #{value}",
+                         reply_markup: build_products_keyboard(category.products)
           end
-          save_context :product
-          respond_with :message, text: "Теперь выберите что-то из категории #{value}",
-                                 reply_markup: build_products_keyboard(category.products)
         else
-          markup = build_category_keyboard
+          markup = build_category_keyboard(session[:category_stack_id].last)
           respond_with :message, text: "Категории #{value} нет. Выберите заново",
                                  reply_markup: markup
         end
       end
     else
-      markup = build_category_keyboard
+      markup = build_category_keyboard(session[:category_stack_id].last)
       text_to_answer = session[:cart].empty? ? 'Я помогу с оформлением заказа' : 'Возможно, Вы хотите выбрать что-то еще'
       respond_with :message, text:  text_to_answer, reply_markup: markup
     end
@@ -77,7 +87,6 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
                        reply_markup: {
                           inline_keyboard: inline
                        } if product.image
-          respond_with :message, text: product.description, reply_markup:{inline_keyboard: inline} unless product.image
         else
           respond_with :message, text: "#{value} нет в каталоге"
         end
@@ -294,7 +303,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       kb.append([c.name])
     end
     kb.append([IN_CART_WORD]) unless session[:cart].empty?
-    kb.append([BACK_WORD]) unless session[:category_stack_id].empty?
+    kb.append([BACK_WORD]) if parent_id
     if parent_id
       c = Category.find(parent_id)
       kb.append([OPEN_CURRENT_CATEGORY]) unless c.products.empty?

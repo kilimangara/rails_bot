@@ -27,6 +27,7 @@ module ShaurmaBot
     config.middleware.use ActionDispatch::Session::CookieStore, config.session_options
     config.middleware.use Rack::MethodOverride
     config.paperclip_defaults = {
+        default_url: 'http://itprinter.ru/bitrix/templates/.default/components/bitrix/catalog/all_cat/bitrix/catalog.element/.default/images/no_photo.png',
         storage: :s3,
         url: ':s3_domain_url',
         s3_region: 'eu-central-1',
