@@ -5,6 +5,8 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   BACK_WORD = '← Назад'.freeze
 
+  OPEN_CURRENT_CATEGORY = 'Что в этой категории?'.freeze
+
   IN_CART_WORD = 'В корзину'.freeze
 
   CALLBACK_TYPE_ADD_VARIANT = 0
@@ -18,6 +20,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   def start(*)
     session[:cart] = []
     session[:messages_to_delete] = []
+    session[:category_stack_id] = []
     category
   end
 
@@ -30,6 +33,10 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       else
         category = Category.where(name: value).first
         if category
+          if category.inner_categories
+            session[:category_stack_id].push(category.id)
+            respond_with :message, text:"Продолжим!", reply_markup: build_category_keyboard(category.id)
+          end
           save_context :product
           respond_with :message, text: "Теперь выберите что-то из категории #{value}",
                                  reply_markup: build_products_keyboard(category.products)
@@ -65,13 +72,12 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
             inline.append([{ text: "#{v.name} Цена: #{v.price}", callback_data: callback_data }])
           end
           category
-          save_context :category
-          # respond_with :photo, photo: 'https://s3.eu-central-1.amazonaws.com/statictgbot/static/ulitka.jpg'
-          respond_with :photo, photo: product.url,
+          respond_with :photo, photo: product.image.url,
                        caption: product.description,
                        reply_markup: {
                           inline_keyboard: inline
-                       }
+                       } if product.image
+          respond_with :message, text: product.description, reply_markup:{inline_keyboard: inline} unless product.image
         else
           respond_with :message, text: "#{value} нет в каталоге"
         end
@@ -282,12 +288,17 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     end
   end
 
-  def build_category_keyboard
+  def build_category_keyboard(parent_id=nil)
     kb = []
-    Category.all.each do |c|
+    Category.where(parent_category_id: parent_id).each do |c|
       kb.append([c.name])
     end
     kb.append([IN_CART_WORD]) unless session[:cart].empty?
+    kb.append([BACK_WORD]) unless session[:category_stack_id].empty?
+    if parent_id
+      c = Category.find(parent_id)
+      kb.append([OPEN_CURRENT_CATEGORY]) unless c.products.empty?
+    end
     {
       keyboard: kb,
       resize_keyboard: true,

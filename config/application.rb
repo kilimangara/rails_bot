@@ -26,7 +26,19 @@ module ShaurmaBot
     config.middleware.use ActionDispatch::Cookies
     config.middleware.use ActionDispatch::Session::CookieStore, config.session_options
     config.middleware.use Rack::MethodOverride
-
+    config.paperclip_defaults = {
+        storage: :s3,
+        url: ':s3_domain_url',
+        s3_region: 'eu-central-1',
+        s3_host_name: 's3.eu-central-1.amazonaws.com',
+        s3_protocol: 'https',
+        path: '/:class/:attachment/:id_partition/:style/:filename',
+        s3_credentials: {
+            bucket: 'statictgbot',
+            access_key_id: 'AKIAIGPYEROJQ4RT75SA',
+            secret_access_key: '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'
+        }
+    }
     # Settings in config/environments/* take precedence over those specified here.
     # Application configuration should go into files in config/initializers
     # -- all .rb files in that directory are automatically loaded.
