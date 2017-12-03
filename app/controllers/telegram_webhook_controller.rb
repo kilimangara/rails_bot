@@ -198,8 +198,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   end
 
   def help(*)
-    response = respond_with :message, text: t('.content')
-    binding.pry()
+    respond_with :message, text: 'Просто введите /start!'
   end
 
   def callback_query(data)
@@ -240,6 +239,21 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       respond_with :message, text: t('telegram_webhook.action_missing.command', command: action)
     else
       respond_with :message, text: t('telegram_webhook.action_missing.feature', action: action)
+    end
+  end
+
+  def merchant(*args)
+    phone = args.at(0)
+    merchant = Merchant.where(phone: phone).first
+    if merchant
+      merchant.chat_id = chat['id']
+      if merchant.save
+        respond_with :message, text: 'Вы зарегестрированы как продавец!'
+      else
+        respond_with :message, text: 'Возникла какая-то ошибка, попробуйте еще'
+      end
+    else
+      respond_with :message, text: 'Такой номер продавца не зарегестрирован :('
     end
   end
 
@@ -284,6 +298,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     end
     order.total = total_price
     order.save
+    send_notify(order)
     order
   end
 
@@ -339,5 +354,17 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   def logged_in?
     @user ||= User.where(id: session[:user_id]).first
+  end
+
+  def send_notify(order)
+    text = "Заказ номер #{order.id}\n"
+    text << "Адрес #{order.shippind_address}\n"
+    order.order_lines.each_with_index do |ol, index|
+      text << "#{index + 1}: #{ol.name}x#{ol.quantity}"
+    end
+    text << "Общая стоимость #{order.total}"
+    Merchant.all.each do |merchant|
+      bot.send_message(chat_id: merchant.chat_id, text: text)
+    end
   end
 end
