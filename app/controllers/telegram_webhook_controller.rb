@@ -358,11 +358,12 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   def send_notify(order)
     text = "Заказ номер #{order.id}\n"
-    text << "Адрес #{order.shippind_address}\n"
+    text << "Адрес #{order.shipping_address}\n"
     order.order_lines.each_with_index do |ol, index|
-      text << "#{index + 1}: #{ol.name}x#{ol.quantity}"
+      text << "#{index + 1}: #{ol.name} x #{ol.quantity}\n"
     end
-    text << "Общая стоимость #{order.total}"
+    text << "Доставить в #{order.delivery_date}\n"
+    text << "Общая стоимость #{order.total}\n"
     Merchant.all.each do |merchant|
       bot.send_message(chat_id: merchant.chat_id, text: text)
     end
