@@ -21,6 +21,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     session[:cart] = []
     session[:messages_to_delete] = []
     session[:category_stack_id] = []
+    Chat.create(chat_id: chat['id'])
     category
   end
 
