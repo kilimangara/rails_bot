@@ -1,5 +1,5 @@
 GIT
-  remote: git@github.com:beyondthestory/rails_admin_map_field.git
+  remote: https://github.com/beyondthestory/rails_admin_map_field.git
   revision: abf774bda26f7a264a3b0bad2b98990514b60b16
   specs:
     rails_admin_map_field (0.0.1)
