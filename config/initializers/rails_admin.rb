@@ -38,4 +38,16 @@ RailsAdmin.config do |config|
     # history_index
     # history_show
   end
+
+  config.model NotificationLocation do
+    edit do
+      field :latitude, :map do
+        longitude_field :longitude
+        google_api_key 'AIzaSyA8OFKiI19JcArE7VuRTU424fh3UxaAGSA'
+        default_longitude 37.66
+        default_latitude 55.64
+      end
+      field :description
+    end
+  end
 end

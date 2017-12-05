@@ -1,3 +1,10 @@
+GIT
+  remote: git@github.com:beyondthestory/rails_admin_map_field.git
+  revision: abf774bda26f7a264a3b0bad2b98990514b60b16
+  specs:
+    rails_admin_map_field (0.0.1)
+      rails (>= 3.0.0)
+
 GEM
   remote: https://rubygems.org/
   specs:
@@ -257,6 +264,7 @@ DEPENDENCIES
   puma (~> 3.7)
   rails (~> 5.1.4)
   rails_admin (~> 1.2)
+  rails_admin_map_field!
   redis-rails
   spring
   spring-watcher-listen (~> 2.0.0)

@@ -19,6 +19,8 @@ gem 'pry'
 gem 'rails_admin', '~> 1.2'
 gem "paperclip", "~> 5.0.0"
 gem 'aws-sdk', '~> 2.3.0'
+# gem "rails_admin_place_field", :git => "git://github.com/thinkclay/rails_admin_place_field.git"
+gem "rails_admin_map_field", :git => "git@github.com:beyondthestory/rails_admin_map_field.git"
 # Build JSON APIs with ease. Read more: https://github.com/rails/jbuilder
 # gem 'jbuilder', '~> 2.5'
 # Use Redis adapter to run Action Cable in production
