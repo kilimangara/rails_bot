@@ -180,7 +180,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     elsif value == SELF_DELIVERY_TYPE
       order = build_order(DateTime.now, false)
       after_order_action unless order.errors.empty?
-      respond_with :message, text: "Ваш заказ принят! Сумма заказа #{response[:order].total}" unless order.errors.empty?
+      respond_with :message, text: "Ваш заказ принят! Сумма заказа #{order.total}" unless order.errors.empty?
     else
       save_context :choose_order_type
       respond_with :message, text: 'Выбери то, что по душе', reply_markup: types_keyboard
