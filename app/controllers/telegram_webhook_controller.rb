@@ -113,7 +113,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
         session[:user_id] = @user.id
         order
       else
-        respond_with :message, text:'Вы отправили что-то не то'
+        respond_with :message, text: 'Вы отправили что-то не то'
       end
     end
   end
@@ -236,11 +236,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   end
 
   def action_missing(action, *_args)
-    if command?
-      respond_with :message, text: t('telegram_webhook.action_missing.command', command: action)
-    else
-      respond_with :message, text: t('telegram_webhook.action_missing.feature', action: action)
-    end
+    respond_with :message, text: 'Такому меня еще не учили :('
   end
 
   def merchant(*args)
