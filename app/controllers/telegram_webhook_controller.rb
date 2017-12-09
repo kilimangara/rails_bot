@@ -84,7 +84,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
           inline = []
           variants.each do |v|
             callback_data = JSON.generate(type: CALLBACK_TYPE_ADD_VARIANT, id: v.id)
-            inline.append([{ text: "#{v.name} Цена: #{v.price}", callback_data: callback_data }])
+            inline.append([{ text: "#{v.product.name} #{v.name} Цена: #{v.price}", callback_data: callback_data }])
           end
           category
           respond_with :photo, photo: product.image.url,
@@ -146,8 +146,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       variants.each_with_index do |variant, index|
         quantity = session[:cart].at(index)[:quantity]
         total_price += variant.price * quantity
-        name = variant.name || variant.product.name
-        text = "#{index + 1}. #{name} x #{quantity}"
+        text = "#{index + 1}.#{variant.product.name} #{variant.name} x #{quantity}"
         response = respond_with :message, text: text, reply_markup: {
             inline_keyboard: [
                 [{text:'Дублировать позицию', callback_data: JSON.generate(type: CALLBACK_TYPE_DUPLICATE_ITEM, index: index)},
@@ -315,7 +314,8 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     variants = Variant.find(ids)
     variants.each_with_index do |variant, index|
       quantity = session[:cart].at(index)[:quantity]
-      OrderLine.create(order_id:order.id, name: variant.name, price:variant.price, quantity: quantity)
+      name = "#{variant.product.name} #{variant.name}"
+      OrderLine.create(order_id:order.id, name: name, price:variant.price, quantity: quantity)
       total_price += variant.price * quantity
     end
     if total_price < 500 && with_delivery
