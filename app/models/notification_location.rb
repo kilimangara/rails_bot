@@ -5,7 +5,6 @@ class NotificationLocation < ApplicationRecord
 
   after_create :send_location
 
-
   def send_location
     bot = Telegram::Bot::Client.new('415804146:AAFNk6ZZERN5tSuYoYXQf-qPQx1IAcg9FDc')
     Chat.all.each do |c|

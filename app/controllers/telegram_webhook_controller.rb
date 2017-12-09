@@ -17,6 +17,10 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   ORDER_STAGE_ADDRESS = 1
   ORDER_STAGE_DELIVERY_TIME = 2
 
+  DELIVERY_TYPE = 'Доставка(200 рублей)'.freeze
+  SELF_DELIVERY_TYPE = 'Заберу сам'.freeze
+  STACK_TYPE = 'Оставить заявку в пуле заказов'.freeze
+
   def start(*)
     session[:cart] = []
     session[:messages_to_delete] = []
@@ -60,7 +64,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     else
       markup = build_category_keyboard(session[:category_stack_id].last)
       text_to_answer = session[:cart].empty? ? 'Я помогу с оформлением заказа' : 'Возможно, Вы хотите выбрать что-то еще'
-      respond_with :message, text:  text_to_answer, reply_markup: markup
+      respond_with :message, text: text_to_answer, reply_markup: markup
     end
   end
 
@@ -100,10 +104,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     contact = @_payload['contact']
     save_context :login
     if value == 'FIRSTTIME'
-      respond_with :message, text: 'Отправьте свой контакт для авторизации.
-        В мобильной версии нажмите на скрепку и там выберите пункт "Контакт".
-        А в десктопной версии Вам надо выбрать зайти в свой профиль и там нажать соответствующую кнопку'
-      return
+      respond_with_login_keyboard
     end
     if logged_in?
       order
@@ -145,7 +146,8 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       variants.each_with_index do |variant, index|
         quantity = session[:cart].at(index)[:quantity]
         total_price += variant.price * quantity
-        text = "#{index + 1}. #{variant.name} x #{quantity}"
+        name = variant.name || variant.product.name
+        text = "#{index + 1}. #{name} x #{quantity}"
         response = respond_with :message, text: text, reply_markup: {
             inline_keyboard: [
                 [{text:'Дублировать позицию', callback_data: JSON.generate(type: CALLBACK_TYPE_DUPLICATE_ITEM, index: index)},
@@ -154,11 +156,11 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
         }
         session[:messages_to_delete] = session[:messages_to_delete].push(response['result']['message_id'])
       end
-      if total_price < 500
-        total_price += 200
-        response = respond_with :message, text: 'Доставка платная при сумме заказа меньше 500 рублей. Стоимость 200 рублей'
-        session[:messages_to_delete] = session[:messages_to_delete].push(response['result']['message_id'])
-      end
+      # if total_price < 500
+      #   total_price += 200
+      #   response = respond_with :message, text: 'Доставка платная при сумме заказа меньше 500 рублей. Стоимость 200 рублей'
+      #   session[:messages_to_delete] = session[:messages_to_delete].push(response['result']['message_id'])
+      # end
       response = respond_with :message, text: "Сумма заказа #{total_price} рублей. С учетом доставки", reply_markup: {
         keyboard: [
           ['Оформить заказ'],
@@ -169,6 +171,20 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
         selective: true
       }
       session[:messages_to_delete] = session[:messages_to_delete].push(response['result']['message_id'])
+    end
+  end
+
+  def choose_order_type(*args)
+    value = !args.empty? ? args.join(' ') : nil
+    if value == DELIVERY_TYPE
+      order
+    elsif value == SELF_DELIVERY_TYPE
+      order = build_order(DateTime.now, false)
+      after_order_action unless order.errors.empty?
+      respond_with :message, text: "Ваш заказ принят! Сумма заказа #{response[:order].total}" unless order.errors.empty?
+    else
+      save_context :choose_order_type
+      respond_with :message, text: 'Выбери то, что по душе'
     end
   end
 
@@ -263,6 +279,19 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     category
   end
 
+  def types_keyboard
+    kb = [
+        [{text: SELF_DELIVERY_TYPE}],
+        [{text: DELIVERY_TYPE}]
+    ]
+    {
+        keyboard: kb,
+        resize_keyboard: true,
+        one_time_keyboard: true,
+        selective: true
+    }
+  end
+
   def order_time(time)
     parsed_time = time.in_time_zone('Moscow')
     if parsed_time
@@ -274,22 +303,22 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     end
   end
 
-  def build_order(delivery_time)
+  def build_order(delivery_time, with_delivery=true)
     if session[:cart].empty?
       respond_with :message, text: 'У Вас ничего нет в корзине'
       category
     end
     order = Order.create(user_id: @user.id, delivery_date: delivery_time,
-                         shipping_address: session[:shipping_address])
+                         shipping_address: with_delivery ? session[:shipping_address] : 'Самовывоз' )
     total_price = 0
     ids = session[:cart].map{ |item| item[:product]}
     variants = Variant.find(ids)
     variants.each_with_index do |variant, index|
       quantity = session[:cart].at(index)[:quantity]
-      OrderLine.create(order_id:order.id, name:variant.name, price:variant.price, quantity: quantity)
+      OrderLine.create(order_id:order.id, name: variant.name, price:variant.price, quantity: quantity)
       total_price += variant.price * quantity
     end
-    if total_price < 500
+    if total_price < 500 && with_delivery
       OrderLine.create(name: 'Доставка', order_id: order.id, price: 200, quantity: 1)
       total_price += 200
     end
@@ -307,6 +336,19 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       session[:cart] = session[:cart].push(product: product_id,
                                            quantity: quantity)
     end
+  end
+
+  def respond_with_login_keyboard
+    kb = [
+        [{ text: 'Отправить контакт', request_contact: true }]
+    ]
+    markup = {
+        keyboard: kb,
+        resize_keyboard: true,
+        one_time_keyboard: true,
+        selective: true
+    }
+    respond_with :message, text: 'Отправьте контакт для авторизации', reply_markup: markup
   end
 
   def build_category_keyboard(parent_id=nil)
