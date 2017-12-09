@@ -127,7 +127,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     value = !args.empty? ? args.join(' ') : nil
     save_context :cart
     if value == 'Оформить заказ'
-      order
+      choose_order_type
     elsif value == 'Обратно в категории'
       category
     elsif session[:cart].empty?
