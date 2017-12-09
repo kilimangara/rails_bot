@@ -105,16 +105,15 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     save_context :login
     if value == 'FIRSTTIME'
       respond_with_login_keyboard
+      return
     end
     if logged_in?
-      order
+      choose_order_type
     else
       if contact
         @user = User.find_or_create_by(phone: contact['phone_number'], name: contact['first_name'])
         session[:user_id] = @user.id
-        order
-      else
-        respond_with :message, text: 'Вы отправили что-то не то'
+        choose_order_type
       end
     end
   end
@@ -160,7 +159,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       #   response = respond_with :message, text: 'Доставка платная при сумме заказа меньше 500 рублей. Стоимость 200 рублей'
       #   session[:messages_to_delete] = session[:messages_to_delete].push(response['result']['message_id'])
       # end
-      response = respond_with :message, text: "Сумма заказа #{total_price} рублей. С учетом доставки", reply_markup: {
+      response = respond_with :message, text: "Сумма заказа #{total_price} рублей", reply_markup: {
         keyboard: [
           ['Оформить заказ'],
           ['Обратно в категории']
@@ -175,15 +174,19 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   def choose_order_type(*args)
     value = !args.empty? ? args.join(' ') : nil
-    if value == DELIVERY_TYPE
-      order
-    elsif value == SELF_DELIVERY_TYPE
-      order = build_order(DateTime.now, false)
-      after_order_action unless order.errors.empty?
-      respond_with :message, text: "Ваш заказ принят! Сумма заказа #{order.total}" unless order.errors.empty?
+    if logged_in?
+      if value == DELIVERY_TYPE
+        order
+      elsif value == SELF_DELIVERY_TYPE
+        order = build_order(DateTime.now, false)
+        after_order_action
+        respond_with :message, text: "Ваш заказ принят! Сумма заказа #{order.total}"
+      else
+        save_context :choose_order_type
+        respond_with :message, text: 'Выбери то, что по душе', reply_markup: types_keyboard
+      end
     else
-      save_context :choose_order_type
-      respond_with :message, text: 'Выбери то, что по душе', reply_markup: types_keyboard
+      login("FIRSTTIME")
     end
   end
 
@@ -209,7 +212,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
         respond_with :message, text: 'Выберите адрес доставки'
       end
     else
-      login('FIRSTTIME')
+      login("FIRSTTIME")
     end
   end
 
@@ -324,7 +327,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     end
     order.total = total_price
     order.save
-    send_notify(order)
+    send_notify(order, with_delivery)
     order
   end
 
@@ -395,13 +398,15 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     @user ||= User.where(id: session[:user_id]).first
   end
 
-  def send_notify(order)
+  def send_notify(order, with_delivery)
     text = "Заказ номер #{order.id}\n"
     text << "Адрес #{order.shipping_address}\n"
     order.order_lines.each_with_index do |ol, index|
       text << "#{index + 1}: #{ol.name} x #{ol.quantity}\n"
     end
-    text << "Доставить в #{order.delivery_date}\n"
+    if with_delivery
+      text << "Доставить в #{order.delivery_date.time.to_formatted_s(:db)}\n"
+    end
     text << "Общая стоимость #{order.total}\n"
     Merchant.all.each do |merchant|
       bot.send_message(chat_id: merchant.chat_id, text: text)
