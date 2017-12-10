@@ -706,6 +706,6 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   end
 
   def user_exist?
-    !Chat.where(chat_id: chat['id']).first
+    Chat.where(chat_id: chat['id']).first
   end
 end
