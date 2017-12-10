@@ -34,6 +34,12 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   SHAURMA_SERVICE = 'Шаурма у МИФИ'.freeze
 
+  BUNDLE_RULES = 'Условия АКЦИИ:
+        1)Вас должно быть 3 человека
+        2)Подпишитесь на ВПомощь || МИФИ
+        3)Зарегистрируйтесь в боте - войдите в него и введите "/start"
+        4)Закажите 3 шаурмы по цене одной! '.freeze
+
   BUNDLE_ADD_TEXTS = [
       'Добавить в корзину',
       'Добавить в корзину',
@@ -141,7 +147,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
         end
       end
     else
-      respond_with :message, text:'Выбирай скорее акцию - можешь не успеть!',
+      respond_with :message, text:BUNDLE_RULES,
                    reply_markup: build_bundle_keyboard
     end
   end
@@ -425,7 +431,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
             inline_keyboard: [[]]
           }
           category
-          answer_callback_query  "#{i.name} добалено в корзину", show_alert: true
+          answer_callback_query  "#{i.name} добавлено в корзину", show_alert: true
         when CALLBACK_TYPE_DUPLICATE_ITEM
           item = !json_data['is_bundle'] ? session[:cart].at(json_data['index'])
                     : session[:bundle_cart].at(json_data['index'])
@@ -457,7 +463,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
               inline_keyboard: [[]]
           }
           category
-          answer_callback_query "#{b.name} добвлено в корзину", show_alert: true
+          answer_callback_query "#{b.name} добавлено в корзину", show_alert: true
         else answer_callback_query  'Произошла ошибка', show_alert: true
       end
     end
