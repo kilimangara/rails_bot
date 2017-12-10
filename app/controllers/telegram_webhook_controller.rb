@@ -39,7 +39,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   def history(*)
     if logged_in?
       active_orders = Order.where('delivery_date >= ?', DateTime.now).where(canceled: false)
-      respond_with :message, text: 'У вас нет активный заказов' if active_orders.empty?
+      respond_with :message, text: 'У вас нет активных заказов' if active_orders.empty?
       active_orders.each do |o|
         text = format_history_element(o, false)
         callback_data = JSON.generate({ type: CALLBACK_TYPE_CANCEL_ORDER, id: o.id })
@@ -223,6 +223,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       if value == DELIVERY_TYPE
         order
       elsif value == SELF_DELIVERY_TYPE
+        save_context :self_delivery
         respond_with :message, text: "Выбери время, когда заберешь, или введи сам в формате 14:00",
                      reply_markup: time_choice_kb
       else
@@ -518,7 +519,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       text << "Адрес #{order.shipping_address}\n"
       text << "Доставить в #{order.delivery_date.time.to_formatted_s(:db)}\n"
     else
-      text << "Заберет в #{order.delivery_date.time_to_formatted_s(:db)}\n"
+      text << "Заберет в #{order.delivery_date.time.to_formatted_s(:db)}\n"
     end
     order.order_lines.each_with_index do |ol, index|
       text << "#{index + 1}: #{ol.name} x #{ol.quantity}\n"
@@ -541,7 +542,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       text << "Адрес #{order.shipping_address}\n"
       text << "Доставить в #{order.delivery_date.time.to_formatted_s(:db)}\n"
     else
-      text << "Заберу в #{order.delivery_date.time_to_formatted_s(:db)}\n"
+      text << "Заберу в #{order.delivery_date.time.to_formatted_s(:db)}\n"
     end
     order.order_lines.each_with_index do |ol, index|
       text << "#{index + 1}: #{ol.name} x #{ol.quantity}\n"
