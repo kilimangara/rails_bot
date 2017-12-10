@@ -182,7 +182,8 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       end
     else
       markup = build_category_keyboard(session[:category_stack_id].last)
-      text_to_answer = session[:cart].empty? && session[:bundle_cart].empty? ? INTRO_SHAURMA : 'Возможно, Вы хотите выбрать что-то еще'
+      text_to_answer = session[:cart].empty? && session[:bundle_cart].empty? || !user_exist? ? INTRO_SHAURMA
+                           : 'Возможно, Вы хотите выбрать что-то еще'
       respond_with :message, text: text_to_answer, reply_markup: markup
     end
   end
@@ -514,9 +515,10 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   end
 
   def build_order(delivery_time, with_delivery=true)
-    if session[:cart].empty? || session[:bundle_cart].empty?
+    if session[:cart].empty? && session[:bundle_cart].empty?
       respond_with :message, text: 'У Вас ничего нет в корзине'
       category
+      return
     end
     order = Order.create(user_id: @user.id, delivery_date: delivery_time,
                          shipping_address: with_delivery ? session[:shipping_address] : 'Самовывоз' )
@@ -701,5 +703,9 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       text << "#{index + 1}: #{ol.name} x #{ol.quantity}\n"
     end
     text << "Общая стоимость #{order.total}\n"
+  end
+
+  def user_exist?
+    !Chat.where(chat_id: chat['id']).first
   end
 end
