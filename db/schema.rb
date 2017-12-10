@@ -10,10 +10,28 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20171210120923) do
+ActiveRecord::Schema.define(version: 20171210212151) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
+
+  create_table "bundle_lines", force: :cascade do |t|
+    t.bigint "bundle_id"
+    t.bigint "variant_id"
+    t.integer "quantity"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["bundle_id"], name: "index_bundle_lines_on_bundle_id"
+    t.index ["variant_id"], name: "index_bundle_lines_on_variant_id"
+  end
+
+  create_table "bundles", force: :cascade do |t|
+    t.string "name"
+    t.integer "price"
+    t.boolean "active", default: true
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
 
   create_table "categories", force: :cascade do |t|
     t.string "name", null: false

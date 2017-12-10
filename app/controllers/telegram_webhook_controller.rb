@@ -9,11 +9,20 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   IN_CART_WORD = 'В корзину'.freeze
 
+  BUNDLES_WORD = 'Акции'.freeze
+
+  PHOTO1 = 'AgADAgADyKgxG3pkcEk1eznGvi1Qd8fqAw4ABB1jO4PbrFz8GawAAgI'.freeze
+
+  PHOTO2 = 'AgADAgADyagxG3pkcEnSIHhJu-RHbe3yAw4ABHMCS2RwDhioQa0AAgI'.freeze
+
+  PHOTO3 = 'AgADAgADyqgxG3pkcEnsHHbf0lAo0FMDMw4ABJRzdv3ZEOK1ZncBAAEC'.freeze
+
   CALLBACK_TYPE_ADD_VARIANT = 0
   CALLBACK_TYPE_DELETE_FROM_CART = 1
   CALLBACK_TYPE_DUPLICATE_ITEM = 2
   CALLBACK_TYPE_SAVED_ADDRESS = 3
   CALLBACK_TYPE_CANCEL_ORDER = 4
+  CALLBACK_TYPE_ADD_BUNDLE = 5
 
   ORDER_STAGE_ADDRESS = 1
   ORDER_STAGE_DELIVERY_TIME = 2
@@ -23,16 +32,66 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   IN_1_HOUR = 'Через час'.freeze
   IN_2_HOURS = 'Через 2 часа'.freeze
 
+  SHAURMA_SERVICE = 'Шаурма у МИФИ'.freeze
+
+  BUNDLE_ADD_TEXTS = [
+      'Добавить в корзину',
+      'Добавить в корзину',
+      'Добавить в корзину',
+      'Добавить в корзину',
+      'Добавить в корзину',
+      'Добавить в корзину',
+      'Добавить в корзину',
+      'Добавить в корзину',
+      'Добавить в корзину',
+      'Добавить в корзину',
+      'Добавить в корзину',
+      'Добавить в корзину',
+      'Добавить в корзину',
+      'Добавить в корзину',
+      'Да, норм',
+      'Да, норм',
+      'Да, норм',
+      'Да, норм',
+      'Заебись, беру!'
+  ].sample
+
+  INTRO = 'Привет! Я Бот ВПомощь.
+Я собираю в себе полезные сервисы и услуги для студентов МИФИ!
+Сегодня у нас МЕГА АКЦИЯ - 3 шаурмы по цене одной. Жми "Шаурма у МИФИ" '.freeze
+
+  INTRO_SHAURMA = 'Оформи заказ и забери его без очередей и ожидания!
+МЕГА АКЦИЯ! 3 шаурмы по цене одной!
+Только сегодня по адресу ул. Святослава Рихтера 44к1 (возле чайной)
+Жми "АКЦИИ"! '.freeze
 
   DELIVERY_TYPE = 'Доставка(200 рублей)'.freeze
   SELF_DELIVERY_TYPE = 'Заберу сам'.freeze
   STACK_TYPE = 'Оставить заявку в пуле заказов'.freeze
 
-  def start(*)
+  def start(*args)
+    value = !args.empty? ? args.join(' ') : nil
+    Chat.create(chat_id: chat['id'])
+    save_context :start
+    if value == SHAURMA_SERVICE
+      shaurma
+    else
+      respond_with :message, text: INTRO, reply_markup: {
+          keyboard: [
+              [{text:SHAURMA_SERVICE}]
+          ],
+          resize_keyboard: true,
+          one_time_keyboard: true,
+          selective: true
+      }
+    end
+  end
+
+  def shaurma(*)
     session[:cart] = []
+    session[:bundle_cart] = []
     session[:messages_to_delete] = []
     session[:category_stack_id] = []
-    Chat.create(chat_id: chat['id'])
     category
   end
 
@@ -55,6 +114,38 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   end
 
+  def bundle(*args)
+    value = !args.empty? ? args.join(' ') : nil
+    save_context :bundle
+    if value
+      if value == IN_CART_WORD
+        cart
+      elsif value == BACK_WORD
+        category
+      else
+        bundle = Bundle.where(name: value).first
+        if bundle
+          callback_data = JSON.generate({type: CALLBACK_TYPE_ADD_BUNDLE, id: bundle.id})
+          photo = bundle.variants.first.product.image
+          inline = [
+              [{text: BUNDLE_ADD_TEXTS, callback_data: callback_data}]
+          ]
+          respond_with :photo, photo: photo,
+                       caption: bundle.name,
+                       reply_markup: {
+                           inline_keyboard: inline
+                       } if photo
+        else
+          respond_with :message, text:'Что-то я не вижу такой акции',
+                       reply_markup: build_bundle_keyboard
+        end
+      end
+    else
+      respond_with :message, text:'Выбирай скорее акцию - можешь не успеть!',
+                   reply_markup: build_bundle_keyboard
+    end
+  end
+
   def category(*args)
     value = !args.empty? ? args.join(' ') : nil
     save_context :category
@@ -65,6 +156,8 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
         session[:category_stack_id].pop
         respond_with :message, text: 'Снова тут :(',
                                        reply_markup: build_category_keyboard(session[:category_stack_id].last)
+      elsif value == BUNDLES_WORD
+        bundle
       elsif value == OPEN_CURRENT_CATEGORY
         category = Category.find(session[:category_stack_id].last)
         save_context :product
@@ -89,7 +182,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       end
     else
       markup = build_category_keyboard(session[:category_stack_id].last)
-      text_to_answer = session[:cart].empty? ? 'Я помогу с оформлением заказа' : 'Возможно, Вы хотите выбрать что-то еще'
+      text_to_answer = session[:cart].empty? && session[:bundle_cart].empty? ? INTRO_SHAURMA : 'Возможно, Вы хотите выбрать что-то еще'
       respond_with :message, text: text_to_answer, reply_markup: markup
     end
   end
@@ -174,7 +267,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       choose_order_type
     elsif value == 'Обратно в категории'
       category
-    elsif session[:cart].empty?
+    elsif session[:cart].empty? && session[:bundle_cart].empty?
       respond_with :message, text: 'Корзина пуста', reply_markup: {
           keyboard: [
               ['Обратно в категории']
@@ -185,16 +278,31 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       }
     else
       total_price = 0
-      ids = session[:cart].map { |item| item[:product] }
-      variants = Variant.find(ids)
+      ids = !session[:cart].empty? ? session[:cart].map { |item| item[:product] } : []
+      variants = ids.empty? ? [] : Variant.find(ids)
       variants.each_with_index do |variant, index|
         quantity = session[:cart].at(index)[:quantity]
         total_price += variant.price * quantity
         text = "#{index + 1}.#{variant.product.name} #{variant.name} x #{quantity}"
         response = respond_with :message, text: text, reply_markup: {
             inline_keyboard: [
-                [{text:'Дублировать позицию', callback_data: JSON.generate(type: CALLBACK_TYPE_DUPLICATE_ITEM, index: index)},
-                           {text:'Удалить', callback_data: JSON.generate(type:CALLBACK_TYPE_DELETE_FROM_CART, index: index)}]
+                [{text:'Дублировать позицию', callback_data: JSON.generate(type: CALLBACK_TYPE_DUPLICATE_ITEM, index: index, is_bundle: false)},
+                           {text:'Удалить', callback_data: JSON.generate(type:CALLBACK_TYPE_DELETE_FROM_CART, index: index, is_bundle: false)}]
+            ]
+        }
+        session[:messages_to_delete] = session[:messages_to_delete].push(response['result']['message_id'])
+      end
+
+      ids = !session[:bundle_cart].empty? ? session[:bundle_cart].map { |item| item[:bundle] } : []
+      variants = ids.empty? ? [] : Bundle.find(ids)
+      variants.each_with_index do |bundle, index|
+        quantity = session[:bundle_cart].at(index)[:quantity]
+        total_price += bundle.price * quantity
+        text = "#{index + 1}.#{bundle.name} x #{quantity}"
+        response = respond_with :message, text: text, reply_markup: {
+            inline_keyboard: [
+                [{text:'Дублировать позицию', callback_data: JSON.generate(type: CALLBACK_TYPE_DUPLICATE_ITEM, index: index, is_bundle: true)},
+                 {text:'Удалить', callback_data: JSON.generate(type:CALLBACK_TYPE_DELETE_FROM_CART, index: index, is_bundle: true)}]
             ]
         }
         session[:messages_to_delete] = session[:messages_to_delete].push(response['result']['message_id'])
@@ -318,19 +426,19 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
           category
           answer_callback_query  "#{i.name} добалено в корзину", show_alert: true
         when CALLBACK_TYPE_DUPLICATE_ITEM
-          item = session[:cart].at(json_data['index'])
+          item = !json_data['is_bundle'] ? session[:cart].at(json_data['index'])
+                    : session[:bundle_cart].at(json_data['index'])
           item[:quantity] += 1
-          variant = Variant.where(id: item[:product]).first
-          text = variant ? "В корзине теперь: #{variant.name} #{item[:quantity]} шт "
-                     : "Теперь в корзине #{item[:quantity]} шт."
-          answer_callback_query text, show_alert: true
+          answer_callback_query "Теперь в корзине #{item[:quantity]} шт.", show_alert: true
           delete_messages
           cart
         when CALLBACK_TYPE_DELETE_FROM_CART
-          item = session[:cart].delete_at(json_data['index'])
-          variant = Variant.where(id: item[:product]).first
-          text = variant ? "Позиция #{variant.name} удалена" : "Позиция удалена"
-          answer_callback_query text, show_alert:true
+          if json_data['is_bundle']
+            session[:bundle_cart].delete_at(json_data['index'])
+          else
+            session[:cart].delete_at(json_data['index'])
+          end
+          answer_callback_query 'Позиция удалена', show_alert:true
           delete_messages
           cart
         when CALLBACK_TYPE_CANCEL_ORDER
@@ -341,6 +449,14 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
             answer_callback_query "Заказ №#{order_to_cancel.id} отменен", show_alert: true
             send_notify_cancel order_to_cancel
           end
+        when CALLBACK_TYPE_ADD_BUNDLE
+          b = Bundle.find(json_data['id'])
+          add_bundle(b.id, 1)
+          edit_message :reply_markup, reply_markup: {
+              inline_keyboard: [[]]
+          }
+          category
+          answer_callback_query "#{b.name} добвлено в корзину", show_alert: true
         else answer_callback_query  'Произошла ошибка', show_alert: true
       end
     end
@@ -369,8 +485,8 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   def after_order_action
     session[:cart] = []
+    session[:bundle_cart] = []
     session[:order_stage] = 0
-    respond_with :message, text: 'Возможно вы хотите что-то еще?'
     category
   end
 
@@ -398,20 +514,28 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   end
 
   def build_order(delivery_time, with_delivery=true)
-    if session[:cart].empty?
+    if session[:cart].empty? || session[:bundle_cart].empty?
       respond_with :message, text: 'У Вас ничего нет в корзине'
       category
     end
     order = Order.create(user_id: @user.id, delivery_date: delivery_time,
                          shipping_address: with_delivery ? session[:shipping_address] : 'Самовывоз' )
     total_price = 0
-    ids = session[:cart].map{ |item| item[:product]}
-    variants = Variant.find(ids)
+    ids = !session[:cart].empty? ? session[:cart].map { |item| item[:product] } : []
+    variants = ids.empty? ? [] : Variant.find(ids)
     variants.each_with_index do |variant, index|
       quantity = session[:cart].at(index)[:quantity]
       name = "#{variant.product.name} #{variant.name}"
-      OrderLine.create(order_id:order.id, name: name, price:variant.price, quantity: quantity)
+      OrderLine.create(order_id:order.id, name: name, price: variant.price, quantity: quantity)
       total_price += variant.price * quantity
+    end
+    ids = !session[:bundle_cart].empty? ? session[:bundle_cart].map { |item| item[:bundle] } : []
+    variants = ids.empty? ? [] : Bundle.find(ids)
+    variants.each_with_index do |bundle, index|
+      quantity = session[:bundle_cart].at(index)[:quantity]
+      name = "#{bundle.name} "
+      OrderLine.create(order_id: order.id, name: name, price: bundle.price, quantity: quantity)
+      total_price += bundle.price * quantity
     end
     if total_price < 500 && with_delivery
       OrderLine.create(name: 'Доставка', order_id: order.id, price: 200, quantity: 1)
@@ -433,6 +557,16 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     end
   end
 
+  def add_bundle(bundle_id, quantity)
+    index = session[:bundle_cart].index { |item| item[:bundle] == bundle_id}
+    if index
+      session[:bundle_cart].at(index)[:quantity] += 1
+    else
+      session[:bundle_cart] = session[:bundle_cart].push(bundle: bundle_id,
+                                                          quantity: quantity)
+    end
+  end
+
   def time_choice_kb
     kb = [
         [{text: IN_5_MINUTES}],
@@ -449,6 +583,10 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   end
 
   def respond_with_login_keyboard
+    respond_with :message, text: 'Могут быть баги на устройствах с маленьким экраном.\n Воспользуйтесь этим гайдом'
+    respond_with :photo, photo: PHOTO1
+    respond_with :photo, photo: PHOTO2
+    respond_with :photo, photo: PHOTO3
     kb = [
         [{ text: 'Отправить контакт', request_contact: true }]
     ]
@@ -466,8 +604,9 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     Category.where(parent_category_id: parent_id).each do |c|
       kb.append([c.name])
     end
-    kb.append([IN_CART_WORD]) unless session[:cart].empty?
+    kb.append([IN_CART_WORD]) unless session[:cart].empty? && session[:bundle_cart].empty?
     kb.append([BACK_WORD]) if parent_id
+    kb.append([BUNDLES_WORD]) unless Bundle.where(active: true).empty?
     if parent_id
       c = Category.find(parent_id)
       kb.append([OPEN_CURRENT_CATEGORY]) unless c.products.empty?
@@ -480,13 +619,27 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     }
   end
 
+  def build_bundle_keyboard
+    kb = []
+    Bundle.where(active:true).each do |bundle|
+      kb.append([bundle.name])
+    end
+    kb.append([BACK_WORD])
+    kb.append([IN_CART_WORD]) unless session[:cart].empty? && session[:bundle_cart].empty?
+    {
+        keyboard: kb,
+        resize_keyboard: true, one_time_keyboard: true,
+        selective: true
+    }
+  end
+
   def build_products_keyboard(products)
     kb = []
     products.each do |p|
       kb.append([p.name])
     end
     kb.append([BACK_WORD])
-    kb.append([IN_CART_WORD]) unless session[:cart].empty?
+    kb.append([IN_CART_WORD]) unless session[:cart].empty? && session[:bundle_cart].empty?
     {
       keyboard: kb,
       resize_keyboard: true, one_time_keyboard: true,
