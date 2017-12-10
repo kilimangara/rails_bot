@@ -13,9 +13,16 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   CALLBACK_TYPE_DELETE_FROM_CART = 1
   CALLBACK_TYPE_DUPLICATE_ITEM = 2
   CALLBACK_TYPE_SAVED_ADDRESS = 3
+  CALLBACK_TYPE_CANCEL_ORDER = 4
 
   ORDER_STAGE_ADDRESS = 1
   ORDER_STAGE_DELIVERY_TIME = 2
+
+  IN_5_MINUTES = 'Через 5 минут'.freeze
+  IN_30_MINUTES = 'Через 30 минут'.freeze
+  IN_1_HOUR = 'Через час'.freeze
+  IN_2_HOURS = 'Через 2 часа'.freeze
+
 
   DELIVERY_TYPE = 'Доставка(200 рублей)'.freeze
   SELF_DELIVERY_TYPE = 'Заберу сам'.freeze
@@ -27,6 +34,25 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     session[:category_stack_id] = []
     Chat.create(chat_id: chat['id'])
     category
+  end
+
+  def history(*)
+    if logged_in?
+      active_orders = Order.where('delivery_date >= ?', DateTime.now).where(canceled: false)
+      respond_with :message, text: 'У вас нет активный заказов' if active_orders.empty?
+      active_orders.each do |o|
+        text = format_history_element(o, false)
+        callback_data = JSON.generate({ type: CALLBACK_TYPE_CANCEL_ORDER, id: o.id })
+        respond_with :message, text: text, reply_markup: {
+            inline_keyboard: [
+                [{text:'Отменить этот заказ', callback_data: callback_data}]
+            ]
+        }
+      end
+    else
+      login_to_history("FIRSTTIME")
+    end
+
   end
 
   def category(*args)
@@ -118,6 +144,25 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     end
   end
 
+  def login_to_history(*args)
+    value = !args.empty? ? args.join(' ') : nil
+    contact = @_payload['contact']
+    save_context :login_to_history
+    if value == 'FIRSTTIME'
+      respond_with_login_keyboard
+      return
+    end
+    if logged_in?
+      history
+    else
+      if contact
+        @user = User.find_or_create_by(phone: contact['phone_number'], name: contact['first_name'])
+        session[:user_id] = @user.id
+        history
+      end
+    end
+  end
+
   def message(*args)
     start
   end
@@ -178,12 +223,51 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       if value == DELIVERY_TYPE
         order
       elsif value == SELF_DELIVERY_TYPE
-        order = build_order(DateTime.now, false)
-        after_order_action
-        respond_with :message, text: "Ваш заказ принят! Сумма заказа #{order.total}"
+        respond_with :message, text: "Выбери время, когда заберешь, или введи сам в формате 14:00",
+                     reply_markup: time_choice_kb
       else
         save_context :choose_order_type
         respond_with :message, text: 'Выбери то, что по душе', reply_markup: types_keyboard
+      end
+    else
+      login("FIRSTTIME")
+    end
+  end
+
+  def self_delivery(*args)
+    value = !args.empty? ? args.join(' ') : nil
+    if logged_in?
+      save_context :self_delivery
+      if value == IN_5_MINUTES
+        order = build_order(DateTime.now + 5.minutes, false)
+        after_order_action
+        respond_with :message, text: "Ваш заказ принят! Сумма заказа #{order.total}.\n Номер заказа #{order.id}"
+      elsif value == IN_30_MINUTES
+        order = build_order(DateTime.now + 30.minutes, false)
+        after_order_action
+        respond_with :message, text: "Ваш заказ принят! Сумма заказа #{order.total}.\n Номер заказа #{order.id}"
+      elsif value == IN_1_HOUR
+        order = build_order(DateTime.now + 1.hour, false)
+        after_order_action
+        respond_with :message, text: "Ваш заказ принят! Сумма заказа #{order.total}.\n Номер заказа #{order.id}"
+      elsif value == IN_2_HOURS
+        order = build_order(DateTime.now + 2.hours, false)
+        after_order_action
+        respond_with :message, text: "Ваш заказ принят! Сумма заказа #{order.total}.\n Номер заказа #{order.id}"
+      else
+        if valid_time?(value)
+          str_time = parse_time(value)
+          delivery_time = Time.zone.parse(str_time)
+          if delivery_time < DateTime.now
+            respond_with :message, text: 'Нельзя уйти в прошлое!', reply_markup: time_choice_kb
+          else
+            order = build_order(delivery_time, false)
+            after_order_action
+            respond_with :message, text: "Ваш заказ принят! Сумма заказа #{order.total}.\n Номер заказа #{order.id}"
+          end
+        else
+          respond_with :message, text: 'Плохой формат', reply_markup: time_choice_kb
+        end
       end
     else
       login("FIRSTTIME")
@@ -248,6 +332,14 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
           answer_callback_query text, show_alert:true
           delete_messages
           cart
+        when CALLBACK_TYPE_CANCEL_ORDER
+          order_to_cancel = Order.where(id: json_data['id']).first
+          if order_to_cancel
+            order_to_cancel.canceled = true
+            order_to_cancel.save
+            answer_callback_query "Заказ №#{order_to_cancel.id} отменен", show_alert: true
+            send_notify_cancel order_to_cancel
+          end
         else answer_callback_query  'Произошла ошибка', show_alert: true
       end
     end
@@ -284,7 +376,6 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   def types_keyboard
     kb = [
         [{text: SELF_DELIVERY_TYPE}],
-        [{text: DELIVERY_TYPE}]
     ]
     {
         keyboard: kb,
@@ -341,6 +432,21 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     end
   end
 
+  def time_choice_kb
+    kb = [
+        [{text: IN_5_MINUTES}],
+        [{text: IN_30_MINUTES}],
+        [{text: IN_1_HOUR}],
+        [{text: IN_2_HOURS}]
+    ]
+    {
+        keyboard: kb,
+        resize_keyboard: true,
+        one_time_keyboard: true,
+        selective: true
+    }
+  end
+
   def respond_with_login_keyboard
     kb = [
         [{ text: 'Отправить контакт', request_contact: true }]
@@ -394,22 +500,52 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     session[:messages_to_delete] = []
   end
 
+  def valid_time?(time)
+    !/[\d]{2}:[\d]{2}/.match(time).to_s.empty?
+  end
+
+  def parse_time(time)
+    /[\d]{2}:[\d]{2}/.match(time).to_s
+  end
+
   def logged_in?
     @user ||= User.where(id: session[:user_id]).first
   end
 
   def send_notify(order, with_delivery)
     text = "Заказ номер #{order.id}\n"
-    text << "Адрес #{order.shipping_address}\n"
+    if with_delivery
+      text << "Адрес #{order.shipping_address}\n"
+      text << "Доставить в #{order.delivery_date.time.to_formatted_s(:db)}\n"
+    else
+      text << "Заберет в #{order.delivery_date.time_to_formatted_s(:db)}\n"
+    end
     order.order_lines.each_with_index do |ol, index|
       text << "#{index + 1}: #{ol.name} x #{ol.quantity}\n"
     end
-    if with_delivery
-      text << "Доставить в #{order.delivery_date.time.to_formatted_s(:db)}\n"
-    end
     text << "Общая стоимость #{order.total}\n"
     Merchant.all.each do |merchant|
-      bot.send_message(chat_id: merchant.chat_id, text: text)
+      bot.send_message(chat_id: merchant.chat_id, text: text) if merchant.chat_id
     end
+  end
+
+  def send_notify_cancel(order)
+    Merchant.all.each do |merchant|
+      bot.send_message(chat_id: merchant.chat_id, text: "Заказ №#{order.id} отменен") if merchant.chat_id
+    end
+  end
+
+  def format_history_element(order, with_delivery)
+    text = "Заказ номер #{order.id}\n"
+    if with_delivery
+      text << "Адрес #{order.shipping_address}\n"
+      text << "Доставить в #{order.delivery_date.time.to_formatted_s(:db)}\n"
+    else
+      text << "Заберу в #{order.delivery_date.time_to_formatted_s(:db)}\n"
+    end
+    order.order_lines.each_with_index do |ol, index|
+      text << "#{index + 1}: #{ol.name} x #{ol.quantity}\n"
+    end
+    text << "Общая стоимость #{order.total}\n"
   end
 end
