@@ -692,8 +692,11 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   def logged_in?
     @user ||= User.where(id: session[:user_id]).first
-    return @user.banned if @user
-    false if @user
+    if @user
+      @user.banned
+    else
+      false
+    end
   end
 
   def send_notify(order, with_delivery)
