@@ -11,11 +11,11 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   BUNDLES_WORD = 'Акции'.freeze
 
-  PHOTO1 = 'AgADAgADyKgxG3pkcEk1eznGvi1Qd8fqAw4ABB1jO4PbrFz8GawAAgI'.freeze
+  PHOTO1 = 'https://s3.eu-central-1.amazonaws.com/statictgbot/static/guide0.jpg'.freeze
 
-  PHOTO2 = 'AgADAgADyagxG3pkcEnSIHhJu-RHbe3yAw4ABHMCS2RwDhioQa0AAgI'.freeze
+  PHOTO2 = 'https://s3.eu-central-1.amazonaws.com/statictgbot/static/guide1.jpg'.freeze
 
-  PHOTO3 = 'AgADAgADyqgxG3pkcEnsHHbf0lAo0FMDMw4ABJRzdv3ZEOK1ZncBAAEC'.freeze
+  PHOTO3 = 'https://s3.eu-central-1.amazonaws.com/statictgbot/static/guide2.jpg'.freeze
 
   CALLBACK_TYPE_ADD_VARIANT = 0
   CALLBACK_TYPE_DELETE_FROM_CART = 1
@@ -591,7 +591,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   end
 
   def respond_with_login_keyboard
-    respond_with :message, text: 'Могут быть баги на устройствах с маленьким экраном.\n Воспользуйтесь этим гайдом'
+    respond_with :message, text: 'Могут быть баги на устройствах с маленьким экраном. Воспользуйтесь этим гайдом'
     respond_with :photo, photo: PHOTO1
     respond_with :photo, photo: PHOTO2
     respond_with :photo, photo: PHOTO3
