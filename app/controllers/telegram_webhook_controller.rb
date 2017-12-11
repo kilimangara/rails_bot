@@ -189,7 +189,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     else
       markup = build_category_keyboard(session[:category_stack_id].last)
       text_to_answer = session[:cart].empty? && session[:bundle_cart].empty? || !user_exist? ? INTRO_SHAURMA
-                           : 'Возможно, Вы хотите выбрать что-то еще. Если выбор уже сделан, переходи в корзину.'
+                           : 'Возможно, Вы хотите выбрать что-то еще. Если выбор уже сделан, переходите в корзину.'
       respond_with :message, text: text_to_answer, reply_markup: markup
     end
   end
