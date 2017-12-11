@@ -693,7 +693,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   def logged_in?
     @user ||= User.where(id: session[:user_id]).first
     if @user
-      @user.banned
+      !@user.banned
     else
       false
     end
