@@ -685,7 +685,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     order.order_lines.each_with_index do |ol, index|
       text << "#{index + 1}: #{ol.name} x #{ol.quantity}\n"
     end
-    text << "Клиент: #{order.user.name} #{order.user.phone}"
+    text << "Клиент: #{order.user.name} #{order.user.phone}\n"
     text << "Общая стоимость #{order.total}\n"
     Merchant.all.each do |merchant|
       bot.send_message(chat_id: merchant.chat_id, text: text) if merchant.chat_id
