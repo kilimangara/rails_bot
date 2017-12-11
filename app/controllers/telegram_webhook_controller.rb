@@ -609,12 +609,12 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   def build_category_keyboard(parent_id=nil)
     kb = []
+    kb.append([BUNDLES_WORD]) unless Bundle.where(active: true).empty?
     Category.where(parent_category_id: parent_id).each do |c|
       kb.append([c.name])
     end
     kb.append([IN_CART_WORD]) unless session[:cart].empty? && session[:bundle_cart].empty?
     kb.append([BACK_WORD]) if parent_id
-    kb.append([BUNDLES_WORD]) unless Bundle.where(active: true).empty?
     if parent_id
       c = Category.find(parent_id)
       kb.append([OPEN_CURRENT_CATEGORY]) unless c.products.empty?
