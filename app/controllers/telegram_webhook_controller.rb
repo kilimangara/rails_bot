@@ -27,10 +27,10 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
   ORDER_STAGE_ADDRESS = 1
   ORDER_STAGE_DELIVERY_TIME = 2
 
-  IN_5_MINUTES = 'Через 5 минут'.freeze
-  IN_30_MINUTES = 'Через 30 минут'.freeze
-  IN_1_HOUR = 'Через час'.freeze
-  IN_2_HOURS = 'Через 2 часа'.freeze
+  IN_5_MINUTES = 'Пулей'.freeze
+  IN_30_MINUTES = 'Через 10 минут'.freeze
+  IN_1_HOUR = 'Через 20 минут'.freeze
+  IN_2_HOURS = 'Через 30 минут'.freeze
 
   SHAURMA_SERVICE = 'Шаурма у МИФИ'.freeze
 
@@ -103,7 +103,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   def history(*)
     if logged_in?
-      active_orders = Order.where('delivery_date >= ?', DateTime.now).where(canceled: false)
+      active_orders = Order.where('delivery_date >= ?', DateTime.now).where(canceled: false, user_id:@user.id)
       respond_with :message, text: 'У вас нет активных заказов' if active_orders.empty?
       active_orders.each do |o|
         text = format_history_element(o, false)
@@ -189,7 +189,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     else
       markup = build_category_keyboard(session[:category_stack_id].last)
       text_to_answer = session[:cart].empty? && session[:bundle_cart].empty? || !user_exist? ? INTRO_SHAURMA
-                           : 'Возможно, Вы хотите выбрать что-то еще'
+                           : 'Возможно, Вы хотите выбрать что-то еще. Если выбор уже сделан, переходи в корзину.'
       respond_with :message, text: text_to_answer, reply_markup: markup
     end
   end
@@ -356,20 +356,20 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       save_context :self_delivery
       if value == IN_5_MINUTES
         order = build_order(DateTime.now + 5.minutes, false)
-        after_order_action
         respond_with :message, text: "Ваш заказ принят! Сумма заказа #{order.total}.\n Номер заказа #{order.id}"
+        after_order_action
       elsif value == IN_30_MINUTES
-        order = build_order(DateTime.now + 30.minutes, false)
-        after_order_action
+        order = build_order(DateTime.now + 10.minutes, false)
         respond_with :message, text: "Ваш заказ принят! Сумма заказа #{order.total}.\n Номер заказа #{order.id}"
+        after_order_action
       elsif value == IN_1_HOUR
-        order = build_order(DateTime.now + 1.hour, false)
-        after_order_action
+        order = build_order(DateTime.now + 20.minutes, false)
         respond_with :message, text: "Ваш заказ принят! Сумма заказа #{order.total}.\n Номер заказа #{order.id}"
+        after_order_action
       elsif value == IN_2_HOURS
-        order = build_order(DateTime.now + 2.hours, false)
-        after_order_action
+        order = build_order(DateTime.now + 30.minutes, false)
         respond_with :message, text: "Ваш заказ принят! Сумма заказа #{order.total}.\n Номер заказа #{order.id}"
+        after_order_action
       else
         if valid_time?(value)
           str_time = parse_time(value)
@@ -378,8 +378,8 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
             respond_with :message, text: 'Нельзя уйти в прошлое!', reply_markup: time_choice_kb
           else
             order = build_order(delivery_time, false)
-            after_order_action
             respond_with :message, text: "Ваш заказ принят! Сумма заказа #{order.total}.\n Номер заказа #{order.id}"
+            after_order_action
           end
         else
           respond_with :message, text: 'Плохой формат', reply_markup: time_choice_kb
@@ -398,9 +398,9 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
         case session[:order_stage]
           when ORDER_STAGE_DELIVERY_TIME
             response = order_time value
-            after_order_action if response[:ok]
             respond_with :message,
                          text: "Ваш заказ принят! Сумма заказа #{response[:order].total}" if response[:ok]
+            after_order_action if response[:ok]
           when ORDER_STAGE_ADDRESS
             session[:shipping_address] = value
             session[:order_stage] = ORDER_STAGE_DELIVERY_TIME
