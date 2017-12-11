@@ -234,10 +234,20 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       return
     end
     if logged_in?
+      if @user && @user.banned
+        respond_with :message, text: 'В следующий раз не спамь так много, может не попадешь в бан'
+        start
+        return
+      end
       choose_order_type
     else
       if contact
         @user = User.find_or_create_by(phone: contact['phone_number'], name: contact['first_name'])
+        if @user && @user.banned
+          respond_with :message, text: 'В следующий раз не спамь так много, может не попадешь в бан'
+          start
+          return
+        end
         session[:user_id] = @user.id
         choose_order_type
       end
@@ -253,10 +263,20 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       return
     end
     if logged_in?
+      if @user && @user.banned
+        respond_with :message, text: 'В следующий раз не спамь так много, может не попадешь в бан'
+        start
+        return
+      end
       history
     else
       if contact
         @user = User.find_or_create_by(phone: contact['phone_number'], name: contact['first_name'])
+        if @user && @user.banned
+          respond_with :message, text: 'В следующий раз не спамь так много, может не попадешь в бан'
+          start
+          return
+        end
         session[:user_id] = @user.id
         history
       end
@@ -672,6 +692,8 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   def logged_in?
     @user ||= User.where(id: session[:user_id]).first
+    return @user.banned if @user
+    false if @user
   end
 
   def send_notify(order, with_delivery)
@@ -714,5 +736,10 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   def user_exist?
     Chat.where(chat_id: chat['id']).first
+  end
+
+  def user_banned?
+    logged_in?
+
   end
 end
