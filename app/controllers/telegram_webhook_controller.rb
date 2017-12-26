@@ -34,6 +34,8 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
 
   SHAURMA_SERVICE = 'Шаурма у МИФИ'.freeze
 
+  MEPHI_STORE_SERVICE = 'Mephi store'.freeze
+
   PRINT_MEPHI_SERVICE = 'Печать МИФИ'.freeze
 
   BUNDLE_RULES = 'Условия АКЦИИ:
@@ -79,11 +81,23 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
     save_context :start
     if value == SHAURMA_SERVICE
       shaurma
+    elsif value == MEPHI_STORE_SERVICE
+      respond_with :message, text: '@mephi_store_bot', reply_markup: {
+          keyboard: [
+              [{text:SHAURMA_SERVICE}],
+              [{text:PRINT_MEPHI_SERVICE}],
+              [{text:MEPHI_STORE_SERVICE}]
+          ],
+          resize_keyboard: true,
+          one_time_keyboard: true,
+          selective: true
+      }
     elsif value == PRINT_MEPHI_SERVICE
       respond_with :message, text: '@print_mephi_bot', reply_markup: {
           keyboard: [
               [{text:SHAURMA_SERVICE}],
-              [{text:PRINT_MEPHI_SERVICE}]
+              [{text:PRINT_MEPHI_SERVICE}],
+              [{text:MEPHI_STORE_SERVICE}]
           ],
           resize_keyboard: true,
           one_time_keyboard: true,
@@ -93,7 +107,8 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       respond_with :message, text: INTRO, reply_markup: {
           keyboard: [
               [{text:SHAURMA_SERVICE}],
-              [{text:PRINT_MEPHI_SERVICE}]
+              [{text:PRINT_MEPHI_SERVICE}],
+              [{text:MEPHI_STORE_SERVICE}]
           ],
           resize_keyboard: true,
           one_time_keyboard: true,
