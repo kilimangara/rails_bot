@@ -183,8 +183,12 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       if value == IN_CART_WORD
         cart
       elsif value == BACK_WORD
+        if session[:category_stack_id].empty
+          start
+          return
+        end
         session[:category_stack_id].pop
-        respond_with :message, text: 'Снова тут :(',
+        respond_with :message, text: 'Снова тут',
                                        reply_markup: build_category_keyboard(session[:category_stack_id].last)
       elsif value == BUNDLES_WORD
         bundle
@@ -658,7 +662,7 @@ class TelegramWebhookController < Telegram::Bot::UpdatesController
       kb.append([c.name])
     end
     kb.append([IN_CART_WORD]) unless session[:cart].empty? && session[:bundle_cart].empty?
-    kb.append([BACK_WORD]) if parent_id
+    kb.append([BACK_WORD])
     if parent_id
       c = Category.find(parent_id)
       kb.append([OPEN_CURRENT_CATEGORY]) unless c.products.empty?
